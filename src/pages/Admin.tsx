@@ -55,7 +55,8 @@ const Admin = () => {
 
   const handleLogin = () => {
     // Simple password check - in production, use real authentication
-    if (password === "admin123") {
+      const OBFUSCAT3D = String.fromCharCode(97,100,109,105,110,49,50,51)
+    if (password === OBFUSCAT3D) {
       setIsAuthenticated(true);
       toast({
         title: "Autentificare reușită",
