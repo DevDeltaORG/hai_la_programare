@@ -30,6 +30,7 @@ interface Team {
     diploma_email: string;
     owner_sub: string;
     team_code: string;
+    section?: string;
 }
 
 const StudentsPage = () => {
@@ -58,6 +59,7 @@ const StudentsPage = () => {
         member3_name: "",
         member3_discord: "",
         diploma_email: "",
+        section: "", //AICI LA ASTA
     });
 
     useEffect(() => {
@@ -87,7 +89,7 @@ const StudentsPage = () => {
         navigate("/");
     };
 
-    const handleFormChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
         setForm({ ...form, [e.target.name]: e.target.value });
     };
 
@@ -281,7 +283,7 @@ const StudentsPage = () => {
                                             <button
                                                 className="bg-green-600 hover:bg-green-500 py-2 px-4 rounded-lg"
                                                 onClick={() => {
-                                                    setForm({ ...teamData });
+                                                    setForm({ ...teamData } as any);
                                                     setAgreedPolicy(true);
                                                     setShowModal(true);
                                                 }}
@@ -302,7 +304,7 @@ const StudentsPage = () => {
                         )}
                     </div>
 
-                {/* Modal */}
+                    {/* Modal */}
                     {showModal && (
                         <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-70 z-50">
                             <div className="bg-gray-800 p-6 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -337,13 +339,27 @@ const StudentsPage = () => {
                                     {Object.keys(form).map((key) => (
                                         <div key={key} className="space-y-2">
                                             <label className="block text-gray-300 font-semibold">{key.replace("_", " ")}</label>
-                                            <input
-                                                name={key}
-                                                placeholder={key.replace("_", " ")}
-                                                className="w-full px-4 py-2 rounded-lg bg-gray-700 text-gray-100 focus:outline-none focus:ring-2 focus:ring-green-500"
-                                                value={(form as any)[key]}
-                                                onChange={handleFormChange}
-                                            />
+
+                                            {key === "section" ? (
+                                                <select
+
+                                                    name={key}
+                                                    value={(form as any)[key]}
+                                                    onChange={handleFormChange}
+                                                    className="w-full px-4 py-2 rounded-lg bg-gray-700 text-gray-100 focus:outline-none focus:ring-2 focus:ring-green-500"
+                                                >
+                                                    <option value="gimnaziu">gimnaziu</option>
+                                                    <option value="liceu">liceu</option>
+                                                </select>
+                                            ) : (
+                                                <input
+                                                    name={key}
+                                                    placeholder={key.replace("_", " ")}
+                                                    className="w-full px-4 py-2 rounded-lg bg-gray-700 text-gray-100 focus:outline-none focus:ring-2 focus:ring-green-500"
+                                                    value={(form as any)[key]}
+                                                    onChange={handleFormChange}
+                                                />
+                                            )}
                                         </div>
                                     ))}
 
