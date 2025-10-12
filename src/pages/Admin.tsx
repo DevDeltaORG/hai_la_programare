@@ -42,7 +42,7 @@ const Admin = () => {
             setLoading(true);
             const { data, error } = await supabase
                 .from<TeamData>("teams")
-                .select("id, name, school, coordinator_name, captain_name")
+                .select("id, name, school, coordinator_name, captain_name, created_at")
 
             if (error) {
                 console.error("Supabase error:", error);
@@ -208,10 +208,13 @@ const Admin = () => {
                                         <TableCell>{team.school}</TableCell>
                                         <TableCell>{team.coordinator_name}</TableCell>
                                         <TableCell>{team.captain_name}</TableCell>
-                                        <TableCell>{/* lăsat gol intenționat (Data) */}</TableCell>
-                                        <TableCell>{/* lăsat gol intenționat (Acțiuni) */}</TableCell>
+                                        <TableCell>
+                                            {team.created_at ? new Date(team.created_at).toLocaleString("ro-RO") : "-"}
+                                        </TableCell>
+                                        <TableCell>{/* acțiuni viitoare, ex: buton Detalii */}</TableCell>
                                     </TableRow>
                                 ))}
+
 
                                 {filteredTeams.length === 0 && (
                                     <TableRow>
