@@ -58,14 +58,15 @@ const Admin = () => {
         if (registrationOpen === null) return;
 
         // Dacă coloana e boolean în DB, folosește true/false, dacă e text, "TRUE"/"FALSE"
+        console.log("registrationOpen", registrationOpen);
         const newValue = registrationOpen ? "FALSE" : "TRUE";
 
         const { data, error } = await supabase
             .from("flags")
             .update({ value: newValue })
-            .eq("flag", "registration")
-            .select("value")
-            .maybeSingle();
+            .eq("flag", "registration");
+
+        console.log(error, data, newValue)
 
         if (error) {
             console.error("Eroare la actualizare flag:", error);
@@ -75,14 +76,20 @@ const Admin = () => {
                 variant: "destructive",
             });
             return;
+        } else {
+            if (newValue === "TRUE") {
+                setRegistrationOpen(true);
+            } else {
+                setRegistrationOpen(false);
+            }
         }
 
         if (!data) {
-            toast({
-                title: "Eroare",
-                description: "Nu s-a găsit flag-ul de actualizat.",
-                variant: "destructive",
-            });
+            // toast({
+            //     title: "Eroare",
+            //     description: "Nu s-a găsit flag-ul de actualizat.",
+            //     variant: "destructive",
+            // });
             return;
         }
 
