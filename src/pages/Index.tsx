@@ -2,11 +2,43 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Code2, Users, Trophy, Zap } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { supabase } from "@/lib/supabaseClient"; // ✅ import Supabase client
 
 const Index = () => {
   const navigate = useNavigate();
   const [isVisible, setIsVisible] = useState(false);
   const sectionRef = useRef<HTMLDivElement>(null);
+
+  const [registrationOpen, setRegistrationOpen] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const fetchFlag = async () => {
+      const { data, error } = await supabase
+          .from("flags")
+          .select("value")
+          .eq("flag", "registration")
+          .maybeSingle();
+
+      if (error) {
+        console.error("Eroare la preluarea flagului:", error);
+        setRegistrationOpen(false);
+        return;
+      }
+
+      if (!data || data.length === 0) {
+        console.warn("Niciun rând găsit pentru flag=registration");
+        setRegistrationOpen(false);
+        return;
+      }
+
+      const registrationValue = data["value"];
+      setRegistrationOpen(registrationValue === "TRUE");
+    };
+
+    fetchFlag();
+  }, []);
+
+
 
   // Animatie fade-in la scroll
   useEffect(() => {
@@ -24,7 +56,6 @@ const Index = () => {
 
   return (
       <div className="min-h-screen bg-background">
-
         {/* Hero Section */}
         <section className="relative overflow-hidden py-20 px-4">
           <div className="absolute inset-0 bg-gradient-to-b from-primary/10 via-secondary/5 to-background"></div>
@@ -39,15 +70,24 @@ const Index = () => {
               Descoperă puterea codului! Înscrie-ți echipa la concursul de programare
               pentru elevi de gimnaziu și liceu.
             </p>
+
             <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
-              <Button
-                  size="lg"
-                  className="text-lg hover-glow"
-                  onClick={() => navigate("/students")}
-              >
-                <Users className="w-5 h-5 mr-2" />
-                Înscrie-te acum
-              </Button>
+              {registrationOpen === null ? (
+                  <p className="text-muted-foreground text-lg">Se încarcă...</p>
+              ) : registrationOpen ? (
+                  <Button
+                      size="lg"
+                      className="text-lg hover-glow"
+                      onClick={() => navigate("/students")}
+                  >
+                    <Users className="w-5 h-5 mr-2" />
+                    Înscrie-te acum
+                  </Button>
+              ) : (
+                  <p className="text-lg text-muted-foreground">
+                    Înscrierile nu sunt disponibile momentan...
+                  </p>
+              )}
             </div>
 
             {/* Features Grid */}
@@ -97,29 +137,39 @@ const Index = () => {
           </div>
         </section>
 
-        {/* Program Concurs - Sectiune Atractiva cu text alb */}
+        {/* Program Concurs */}
         <section
             ref={sectionRef}
             className={`py-16 px-6 max-w-4xl mx-auto rounded-2xl shadow-lg bg-gradient-to-r from-primary/20 via-secondary/10 to-accent/20 transition-all duration-1000 ${
                 isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-10"
             }`}
         >
-          <h3 className="text-3xl font-bold text-center mb-6 text-white">Programul Concursului</h3>
+          <h3 className="text-3xl font-bold text-center mb-6 text-white">
+            Programul Concursului
+          </h3>
           <ul className="list-disc list-inside space-y-4 text-white text-lg">
             <li>
-              <strong>Anunțarea temei concursului – Programare aplicată:</strong> 12 februarie 2023, 14:00
+              <strong>Anunțarea temei concursului – Programare aplicată:</strong>{" "}
+              12 februarie 2023, 14:00
             </li>
             <li>
-              <strong>Secțiunea „Gimnaziu” – prezentări live:</strong> 14 februarie 2023, 14:30 – 16:00
+              <strong>Secțiunea „Gimnaziu” – prezentări live:</strong> 14 februarie
+              2023, 14:30 – 16:00
             </li>
             <li>
-              <strong>Secțiunea „Liceu” – prezentări live:</strong> 14 februarie 2023, 16:00 – 17:30
+              <strong>Secțiunea „Liceu” – prezentări live:</strong> 14 februarie
+              2023, 16:00 – 17:30
             </li>
           </ul>
 
           <div className="mt-8 text-white text-base leading-relaxed">
             <p>
-              <strong>SECȚIUNEA I: „APLICAȚII PRACTICE – SECȚIUNEA GIMNAZIU”</strong> – concurs de aplicații practice respectând specificațiile tehnice realizate de juriu în etapa premergătoare desfășurării concursului. Aplicațiile din această etapă vor fi prezentate începând cu ora 14:30, membrii juriului adresând întrebări echipei. Se acordă câte un premiu I, II, III și 3 mențiuni.
+              <strong>SECȚIUNEA I: „APLICAȚII PRACTICE – SECȚIUNEA GIMNAZIU”</strong>{" "}
+              – concurs de aplicații practice respectând specificațiile tehnice
+              realizate de juriu în etapa premergătoare desfășurării concursului.
+              Aplicațiile din această etapă vor fi prezentate începând cu ora 14:30,
+              membrii juriului adresând întrebări echipei. Se acordă câte un premiu
+              I, II, III și 3 mențiuni.
             </p>
             <p className="mt-4">
               <strong>SECȚIUNEA II: „APLICAȚII PRACTICE – SECȚIUNEA LICEU”</strong> – concurs de aplicații practice din domeniul roboticii care rezolvă o problemă curentă din viața de zi cu zi. Juriul adresează întrebări echipelor începând cu ora 16:00 și notează răspunsurile conform criteriilor de jurizare: originalitate, utilitate, fiabilitate, modul de prezentare și posibilități de dezvoltare a aplicației. Se acordă câte un premiu I, II, III și 3 mențiuni.

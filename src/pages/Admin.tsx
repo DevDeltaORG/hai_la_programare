@@ -5,20 +5,13 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Shield, Search, Download } from "lucide-react";
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogHeader,
-    DialogTitle,
-} from "@/components/ui/dialog";
 import { supabase } from "@/lib/supabaseClient.ts";
 
 interface TeamData {
     id: string;
     name: string;
     school: string;
-    coordinator_name: string; // profesor
+    coordinator_name: string;
     captain_name: string;
     created_at?: string | null;
 }
@@ -29,20 +22,84 @@ const Admin = () => {
     const [password, setPassword] = useState("");
     const [teams, setTeams] = useState<TeamData[]>([]);
     const [searchTerm, setSearchTerm] = useState("");
-    const [selectedTeam, setSelectedTeam] = useState<TeamData | null>(null);
     const [loading, setLoading] = useState(false);
+    const [registrationOpen, setRegistrationOpen] = useState<boolean | null>(null);
 
     useEffect(() => {
-        if (isAuthenticated) loadTeams();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+        if (isAuthenticated) {
+            loadTeams();
+            loadFlag();
+        }
     }, [isAuthenticated]);
+
+    // 🔹 Încarcă statusul actual al înscrierilor
+    const loadFlag = async () => {
+        const { data, error } = await supabase
+            .from("flags")
+            .select("value")
+            .eq("flag", "registration")
+            .maybeSingle();
+
+        if (error) {
+            console.error("Eroare la citirea flag:", error);
+            toast({
+                title: "Eroare",
+                description: "Nu s-a putut încărca starea înscrierilor.",
+                variant: "destructive",
+            });
+            return;
+        }
+
+        setRegistrationOpen(data?.value === "TRUE" || data?.value === true);
+    };
+
+    // 🔹 Pornește/Oprește înscrierile
+    const toggleRegistration = async () => {
+        if (registrationOpen === null) return;
+
+        // Dacă coloana e boolean în DB, folosește true/false, dacă e text, "TRUE"/"FALSE"
+        const newValue = registrationOpen ? "FALSE" : "TRUE";
+
+        const { data, error } = await supabase
+            .from("flags")
+            .update({ value: newValue })
+            .eq("flag", "registration")
+            .select("value")
+            .maybeSingle();
+
+        if (error) {
+            console.error("Eroare la actualizare flag:", error);
+            toast({
+                title: "Eroare",
+                description: "Nu s-a putut actualiza starea înscrierilor.",
+                variant: "destructive",
+            });
+            return;
+        }
+
+        if (!data) {
+            toast({
+                title: "Eroare",
+                description: "Nu s-a găsit flag-ul de actualizat.",
+                variant: "destructive",
+            });
+            return;
+        }
+
+        setRegistrationOpen(data.value === "TRUE" || data.value === true);
+
+        toast({
+            title: data.value === "TRUE" || data.value === true ? "Înscrierile au fost pornite" : "Înscrierile au fost oprite",
+            description: `Status actual: ${data.value}`,
+        });
+    };
 
     const loadTeams = async () => {
         try {
             setLoading(true);
             const { data, error } = await supabase
                 .from<TeamData>("teams")
-                .select("id, name, school, coordinator_name, captain_name, created_at")
+                .select("id, name, school, coordinator_name, captain_name, created_at");
 
             if (error) {
                 console.error("Supabase error:", error);
@@ -55,16 +112,16 @@ const Admin = () => {
                 return;
             }
 
-            const items: TeamData[] = (data || []).map((r) => ({
-                id: String((r as any).id ?? ""),
-                name: (r as any).name ?? "",
-                school: (r as any).school ?? "",
-                coordinator_name: (r as any).coordinator_name ?? "",
-                captain_name: (r as any).captain_name ?? "",
-                created_at: (r as any).created_at ?? null,
-            }));
-
-            setTeams(items);
+            setTeams(
+                (data || []).map((r) => ({
+                    id: String((r as any).id ?? ""),
+                    name: (r as any).name ?? "",
+                    school: (r as any).school ?? "",
+                    coordinator_name: (r as any).coordinator_name ?? "",
+                    captain_name: (r as any).captain_name ?? "",
+                    created_at: (r as any).created_at ?? null,
+                }))
+            );
         } catch (err) {
             console.error("Unexpected error fetching teams:", err);
             toast({
@@ -78,7 +135,7 @@ const Admin = () => {
     };
 
     const handleLogin = () => {
-        const OBFUSCAT3D = String.fromCharCode(97, 100, 109, 105, 110, 49, 50, 51); // "admin123"
+        const OBFUSCAT3D = String.fromCharCode(97, 100, 109, 105, 110, 49, 50, 51); // admin123
         if (password === OBFUSCAT3D) {
             setIsAuthenticated(true);
             toast({
@@ -105,7 +162,6 @@ const Admin = () => {
                 (t.captain_name || "").replaceAll('"', '""'),
                 t.created_at ? new Date(t.created_at).toLocaleString("ro-RO") : "",
             ];
-            // wrap fields that may contain commas in quotes
             return row.map((c) => `"${String(c ?? "")}"`).join(",");
         });
 
@@ -158,20 +214,29 @@ const Admin = () => {
     return (
         <div className="min-h-screen bg-background py-12 px-4">
             <div className="max-w-7xl mx-auto">
-                <div className="flex items-center justify-between mb-8">
+                <div className="flex flex-wrap items-center justify-between mb-8 gap-4">
                     <div>
                         <h1 className="text-4xl font-bold glow-text">Admin Dashboard</h1>
                         <p className="text-muted-foreground mt-2">
                             Total echipe înregistrate: {teams.length} {loading && "(se încarcă...)"}
                         </p>
                     </div>
-                    <div className="flex items-center gap-4">
+
+                    <div className="flex flex-wrap items-center gap-4">
                         <Button onClick={loadTeams} className="hover-glow" variant="ghost">
                             Reîncarcă
                         </Button>
                         <Button onClick={exportToCSV} className="hover-glow">
                             <Download className="w-4 h-4 mr-2" />
                             Export CSV
+                        </Button>
+                        <Button
+                            onClick={toggleRegistration}
+                            className={`hover-glow ${
+                                registrationOpen ? "bg-red-600 hover:bg-red-700" : "bg-green-600 hover:bg-green-700"
+                            }`}
+                        >
+                            {registrationOpen ? "Oprește Înscrierile" : "Pornește Înscrierile"}
                         </Button>
                     </div>
                 </div>
@@ -198,7 +263,6 @@ const Admin = () => {
                                     <TableHead>Profesor</TableHead>
                                     <TableHead>Căpitan</TableHead>
                                     <TableHead>Data</TableHead>
-                                    <TableHead>Acțiuni</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -211,14 +275,12 @@ const Admin = () => {
                                         <TableCell>
                                             {team.created_at ? new Date(team.created_at).toLocaleString("ro-RO") : "-"}
                                         </TableCell>
-                                        <TableCell>{/* acțiuni viitoare, ex: buton Detalii */}</TableCell>
                                     </TableRow>
                                 ))}
 
-
                                 {filteredTeams.length === 0 && (
                                     <TableRow>
-                                        <TableCell colSpan={6} className="text-center py-6 text-muted-foreground">
+                                        <TableCell colSpan={5} className="text-center py-6 text-muted-foreground">
                                             Nu sunt echipe care să corespundă criteriului de căutare.
                                         </TableCell>
                                     </TableRow>
@@ -227,41 +289,6 @@ const Admin = () => {
                         </Table>
                     </div>
                 </Card>
-
-                <Dialog open={!!selectedTeam} onOpenChange={() => setSelectedTeam(null)}>
-                    <DialogContent className="max-w-2xl">
-                        <DialogHeader>
-                            <DialogTitle>{selectedTeam?.name}</DialogTitle>
-                            <DialogDescription>Detalii complete echipă</DialogDescription>
-                        </DialogHeader>
-                        {selectedTeam && (
-                            <div className="space-y-4 max-h-[60vh] overflow-y-auto">
-                                <div className="grid grid-cols-2 gap-4 text-sm">
-                                    <div>
-                                        <p className="text-muted-foreground">ID Echipă</p>
-                                        <p className="font-mono">{selectedTeam.id}</p>
-                                    </div>
-                                    <div>
-                                        <p className="text-muted-foreground">Școală</p>
-                                        <p>{selectedTeam.school}</p>
-                                    </div>
-                                    <div>
-                                        <p className="text-muted-foreground">Profesor</p>
-                                        <p>{selectedTeam.coordinator_name}</p>
-                                    </div>
-                                    <div>
-                                        <p className="text-muted-foreground">Căpitan</p>
-                                        <p>{selectedTeam.captain_name}</p>
-                                    </div>
-                                    <div>
-                                        <p className="text-muted-foreground">Data înregistrării</p>
-                                        <p>{selectedTeam.created_at ? new Date(selectedTeam.created_at).toLocaleString("ro-RO") : "-"}</p>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-                    </DialogContent>
-                </Dialog>
             </div>
         </div>
     );
