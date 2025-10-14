@@ -1,0 +1,8 @@
+---
+deployment:
+  tasks:
+    - export DEPLOYPATH=/home/hailapro/public_html/
+    - /usr/local/bin/npm install
+    - /usr/local/bin/npm run build
+    - /bin/rm -rf ${DEPLOYPATH}*
+    - /bin/cp -R dist/* ${DEPLOYPATH}
