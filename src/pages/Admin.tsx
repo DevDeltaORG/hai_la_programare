@@ -141,9 +141,13 @@ const Admin = () => {
         }
     };
 
-    const handleLogin = () => {
-        const OBFUSCAT3D = String.fromCharCode(97, 100, 109, 105, 110, 49, 50, 51); // admin123
-        if (password === OBFUSCAT3D) {
+    const handleLogin = async () => {
+        const res = await supabase
+            .from("flags")
+            .select("value")
+            .eq("flag", "admin_password")
+            .maybeSingle();
+        if (password === res.data['value']) {
             setIsAuthenticated(true);
             toast({
                 title: "Autentificare reușită",
