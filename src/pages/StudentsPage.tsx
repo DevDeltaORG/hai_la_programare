@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { GoogleLogin, googleLogout } from "@react-oauth/google";
-import {jwtDecode} from "jwt-decode";
+import { jwtDecode } from "jwt-decode";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabaseClient.ts";
 import { ClipboardDocumentIcon } from "@heroicons/react/24/outline";
@@ -31,11 +31,11 @@ interface Team {
     owner_sub: string;
     team_code: string;
     section?: string;
+    team_src?: string;
 }
 
 const StudentsPage = () => {
     const navigate = useNavigate();
-
     const [user, setUser] = useState<GoogleUser | null>(
         JSON.parse(localStorage.getItem("currentUser") || "null")
     );
@@ -43,6 +43,9 @@ const StudentsPage = () => {
     const [teamData, setTeamData] = useState<Team | null>(null);
     const [teamCode, setTeamCode] = useState("");
     const [agreedPolicy, setAgreedPolicy] = useState(false);
+    const [contestStarted, setContestStarted] = useState(false);
+    const [subjectLinks, setSubjectLinks] = useState<{ gimnaziu?: string; liceu?: string }>({});
+    const [githubLink, setGithubLink] = useState("");
 
     const [form, setForm] = useState({
         name: "",
@@ -59,8 +62,28 @@ const StudentsPage = () => {
         member3_name: "",
         member3_discord: "",
         diploma_email: "",
-        section: "", //AICI LA ASTA
+        section: "",
     });
+
+    useEffect(() => {
+        const fetchFlags = async () => {
+            const { data, error } = await supabase
+                .from("flags")
+                .select("flag, value")
+                .in("flag", ["start", "subject_gimnaziu", "subject_liceu"]);
+
+            if (!error && data) {
+                const flags: any = {};
+                data.forEach((row) => (flags[row.flag] = row.value));
+                setContestStarted(flags["start"] === "TRUE");
+                setSubjectLinks({
+                    gimnaziu: flags["subject_gimnaziu"],
+                    liceu: flags["subject_liceu"],
+                });
+            }
+        };
+        fetchFlags();
+    }, []);
 
     useEffect(() => {
         const fetchTeam = async () => {
@@ -89,7 +112,9 @@ const StudentsPage = () => {
         navigate("/");
     };
 
-    const handleFormChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    const handleFormChange = (
+        e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+    ) => {
         setForm({ ...form, [e.target.name]: e.target.value });
     };
 
@@ -106,43 +131,27 @@ const StudentsPage = () => {
 
         try {
             if (teamData && teamData.owner_sub === user.sub) {
-                // update echipă
                 const { data, error } = await supabase
                     .from("teams")
                     .update(form)
                     .eq("id", teamData.id)
                     .select()
                     .single();
-
-                if (error) {
-                    console.error("Eroare la update echipă:", error);
-                    alert(`A apărut o eroare la update echipei: ${error.message}`);
-                    return;
-                }
-
+                if (error) throw error;
                 setTeamData(data);
-                setShowModal(false);
             } else {
-                // creare echipă
                 const team_code = generateTeamCode();
                 const { data, error } = await supabase
                     .from("teams")
                     .insert([{ ...form, owner_sub: user.sub, team_code }])
                     .select()
                     .single();
-
-                if (error) {
-                    console.error("Eroare la crearea echipei:", error);
-                    alert(`A apărut o eroare la crearea echipei: ${error.message}`);
-                    return;
-                }
-
+                if (error) throw error;
                 setTeamData(data);
-                setShowModal(false);
             }
+            setShowModal(false);
         } catch (err: any) {
-            console.error("Catch error:", err);
-            alert(`A apărut o eroare neașteptată: ${err.message || err}`);
+            alert(`Eroare: ${err.message}`);
         }
     };
 
@@ -153,7 +162,6 @@ const StudentsPage = () => {
             .select("*")
             .eq("team_code", teamCode)
             .single();
-
         if (error || !data) return alert("Cod echipă invalid!");
         setTeamData(data);
         alert(`Te-ai alăturat echipei ${data.name}!`);
@@ -163,7 +171,7 @@ const StudentsPage = () => {
         if (!user || !teamData) return;
         if (teamData.owner_sub === user.sub) {
             const { error } = await supabase.from("teams").delete().eq("id", teamData.id);
-            if (error) return alert(`Eroare la ștergerea echipei: ${error.message}`);
+            if (error) return alert(`Eroare: ${error.message}`);
             setTeamData(null);
         } else {
             alert("Ai ieșit din echipă.");
@@ -171,13 +179,25 @@ const StudentsPage = () => {
         }
     };
 
+    const handleUploadGitHub = async () => {
+        if (!githubLink.trim()) return alert("Introdu linkul GitHub!");
+        if (!teamData) return;
+        const { error } = await supabase
+            .from("teams")
+            .update({ team_src: githubLink })
+            .eq("id", teamData.id);
+        if (error) return alert("Eroare la trimiterea linkului GitHub!");
+        alert("Linkul GitHub a fost trimis!");
+        setGithubLink("");
+    };
+
     return (
         <div className="min-h-screen bg-gray-900 text-gray-100 p-6 flex flex-col items-center">
             {!user ? (
                 <div className="max-w-md w-full bg-gray-800 p-8 rounded-2xl shadow-lg text-center">
-                    <h1 className="text-3xl font-bold mb-2">Bun venit!</h1>
+                    <h1 className="text-3xl font-bold mb-2">BUN VENIT!</h1>
                     <p className="text-gray-400 mb-6">
-                        Conectează-te cu Google pentru a-ți gestiona echipa
+                        Conectează-te cu Google pentru a-ți gestiona echipa.
                     </p>
                     <GoogleLogin
                         onSuccess={handleLoginSuccess}
@@ -187,129 +207,150 @@ const StudentsPage = () => {
                     />
                 </div>
             ) : (
-                <>
-                    <div className="max-w-4xl w-full">
-                        <div className="bg-gray-800 rounded-2xl shadow-lg p-6 mb-8 flex items-center justify-between">
-                            <div className="flex items-center space-x-4">
-                                <img src={user.picture} alt={user.name} className="w-16 h-16 rounded-full" />
-                                <div>
-                                    <p className="font-bold">{user.name}</p>
-                                    <p className="text-gray-400">{user.email}</p>
-                                </div>
+                <div className="max-w-4xl w-full">
+                    {/* HEADER */}
+                    <div className="bg-gray-800 rounded-2xl shadow-lg p-6 mb-8 flex items-center justify-between">
+                        <div className="flex items-center space-x-4">
+                            <img src={user.picture} alt={user.name} className="w-16 h-16 rounded-full" />
+                            <div>
+                                <p className="font-bold text-lg">{user.name}</p>
+                                <p className="text-gray-400 text-sm">{user.email}</p>
                             </div>
-                            <button
-                                className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg"
-                                onClick={handleLogout}
-                            >
-                                Ieșire
-                            </button>
                         </div>
-
-                        {!teamData ? (
-                            <>
-                                <div className="bg-gray-800 rounded-2xl shadow-lg p-6 flex flex-col items-center mb-8">
-                                    <h2 className="text-xl font-bold mb-2">Alătură-te echipei</h2>
-                                    <input
-                                        type="text"
-                                        placeholder="Cod echipă"
-                                        value={teamCode}
-                                        onChange={(e) => setTeamCode(e.target.value)}
-                                        className="w-full mb-4 px-4 py-3 rounded-lg bg-gray-700 text-gray-100 border border-gray-600 focus:outline-none"
-                                    />
-                                    <button
-                                        className="w-full bg-blue-600 hover:bg-blue-500 text-white py-3 rounded-lg"
-                                        onClick={handleJoinTeam}
-                                    >
-                                        Alătură-te
-                                    </button>
-                                </div>
-
-                                <div className="bg-gray-800 rounded-2xl shadow-lg p-6 flex flex-col items-center mb-8">
-                                    <h2 className="text-xl font-bold mb-4">Creează echipa ta</h2>
-                                    <button
-                                        className="w-full bg-green-600 hover:bg-green-500 text-white py-3 rounded-lg mb-4"
-                                        onClick={() => setShowModal(true)}
-                                    >
-                                        Creează echipă
-                                    </button>
-                                </div>
-                            </>
-                        ) : (
-                            <div className="bg-gray-800 rounded-2xl shadow-lg p-6 mb-8 w-full">
-                                <h2 className="text-2xl font-bold mb-4 flex items-center justify-between">
-                                    Echipa ta
-                                    {teamData.team_code && (
-                                        <div className="flex items-center space-x-2">
-                                            <span className="font-mono tracking-wider text-gray-300">{teamData.team_code}</span>
-                                            <button
-                                                onClick={() => {
-                                                    navigator.clipboard.writeText(teamData.team_code);
-                                                    alert("Cod echipă copiat!");
-                                                }}
-                                                className="text-gray-300 hover:text-green-400"
-                                            >
-                                                <ClipboardDocumentIcon className="w-5 h-5" />
-                                            </button>
-                                        </div>
-                                    )}
-                                </h2>
-
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <div className="space-y-2">
-                                        <p><strong>Nume echipă:</strong> {teamData.name}</p>
-                                        <p><strong>Coordonator:</strong> {teamData.coordinator_name}</p>
-                                        <p><strong>Email:</strong> {teamData.coordinator_email}</p>
-                                        <p><strong>Telefon:</strong> {teamData.coordinator_phone}</p>
-                                        <p><strong>Școala:</strong> {teamData.school}</p>
-                                    </div>
-                                    <div className="space-y-2">
-                                        <p><strong>Căpitan:</strong> {teamData.captain_name} ({teamData.captain_discord})</p>
-                                        <p><strong>Elev 1:</strong> {teamData.member1_name} ({teamData.member1_discord})</p>
-                                        <p><strong>Elev 2:</strong> {teamData.member2_name} ({teamData.member2_discord})</p>
-                                        <p><strong>Elev 3:</strong> {teamData.member3_name} ({teamData.member3_discord})</p>
-                                        <p><strong>Email diplome:</strong> {teamData.diploma_email}</p>
-                                    </div>
-                                </div>
-
-                                <div className="flex mt-4 gap-4">
-                                    {teamData.owner_sub === user.sub ? (
-                                        <>
-                                            <button
-                                                className="bg-red-600 hover:bg-red-500 py-2 px-4 rounded-lg"
-                                                onClick={handleLeaveTeam}
-                                            >
-                                                Șterge echipa
-                                            </button>
-                                            <button
-                                                className="bg-green-600 hover:bg-green-500 py-2 px-4 rounded-lg"
-                                                onClick={() => {
-                                                    setForm({ ...teamData } as any);
-                                                    setAgreedPolicy(true);
-                                                    setShowModal(true);
-                                                }}
-                                            >
-                                                Modifică echipa
-                                            </button>
-                                        </>
-                                    ) : (
-                                        <button
-                                            className="bg-yellow-600 hover:bg-yellow-500 py-2 px-4 rounded-lg"
-                                            onClick={handleLeaveTeam}
-                                        >
-                                            Ieși din echipă
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
-                        )}
+                        <button
+                            className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg"
+                            onClick={handleLogout}
+                        >
+                            Ieșire
+                        </button>
                     </div>
 
-                    {/* Modal */}
+                    {/* ECHIPA */}
+                    {!teamData ? (
+                        <>
+                            <div className="bg-gray-800 rounded-2xl shadow-lg p-6 mb-8 text-center">
+                                <h2 className="text-2xl font-bold mb-4">ALĂTURĂ-TE UNEI ECHIPE</h2>
+                                <input
+                                    type="text"
+                                    placeholder="COD ECHIPĂ"
+                                    value={teamCode}
+                                    onChange={(e) => setTeamCode(e.target.value)}
+                                    className="w-full mb-4 px-4 py-3 rounded-lg bg-gray-700 text-gray-100 border border-gray-600 focus:ring-2 focus:ring-green-500"
+                                />
+                                <button
+                                    className="w-full bg-blue-600 hover:bg-blue-500 text-white py-3 rounded-lg"
+                                    onClick={handleJoinTeam}
+                                >
+                                    ALĂTURĂ-TE
+                                </button>
+                            </div>
+
+                            <div className="bg-gray-800 rounded-2xl shadow-lg p-6 text-center">
+                                <h2 className="text-2xl font-bold mb-4">CREEAZĂ ECHIPA TA</h2>
+                                <button
+                                    className="w-full bg-green-600 hover:bg-green-500 text-white py-3 rounded-lg"
+                                    onClick={() => setShowModal(true)}
+                                >
+                                    CREEAZĂ ECHIPĂ
+                                </button>
+                            </div>
+                        </>
+                    ) : (
+                        <div className="bg-gray-800 rounded-2xl shadow-lg p-6 mb-8">
+                            <h2 className="text-2xl font-bold mb-4">ECHIPA TA</h2>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <p><b>NUME ECHIPĂ:</b> {teamData.name}</p>
+                                    <p><b>COORDONATOR:</b> {teamData.coordinator_name}</p>
+                                    <p><b>EMAIL:</b> {teamData.coordinator_email}</p>
+                                    <p><b>TELEFON:</b> {teamData.coordinator_phone}</p>
+                                    <p><b>ȘCOALA:</b> {teamData.school}</p>
+                                </div>
+                                <div>
+                                    <p><b>CĂPITAN:</b> {teamData.captain_name}</p>
+                                    <p><b>MEMBRI:</b> {teamData.member1_name}, {teamData.member2_name}, {teamData.member3_name}</p>
+                                    <p><b>DISCORD CAPITAN:</b> {teamData.captain_discord}</p>
+                                    <p><b>EMAIL DIPLOMĂ:</b> {teamData.diploma_email}</p>
+                                </div>
+                            </div>
+
+                            {contestStarted && (
+                                <div className="mt-6 bg-gray-700 p-4 rounded-lg">
+                                    <h3 className="text-lg font-bold mb-2 text-green-400">
+                                        🔥 CONCURSUL ESTE PORNIT
+                                    </h3>
+                                    <p>
+                                        <b>Subiect:</b>{" "}
+                                        <a
+                                            href={
+                                                teamData.section === "liceu"
+                                                    ? subjectLinks.liceu
+                                                    : subjectLinks.gimnaziu
+                                            }
+                                            className="underline text-blue-400"
+                                            target="_blank"
+                                            rel="noreferrer"
+                                        >
+                                            Deschide linkul subiectului
+                                        </a>
+                                    </p>
+
+                                    <div className="mt-4">
+                                        <input
+                                            type="text"
+                                            placeholder="Introdu linkul de GitHub al soluției"
+                                            value={githubLink}
+                                            onChange={(e) => setGithubLink(e.target.value)}
+                                            className="w-full mb-2 px-3 py-2 rounded-lg bg-gray-800 border border-gray-600"
+                                        />
+                                        <button
+                                            onClick={handleUploadGitHub}
+                                            className="bg-green-600 hover:bg-green-500 px-4 py-2 rounded-lg w-full"
+                                        >
+                                            Trimite Linkul GitHub
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="flex mt-4 gap-4">
+                                {teamData.owner_sub === user.sub ? (
+                                    <>
+                                        <button
+                                            className="bg-red-600 hover:bg-red-500 py-2 px-4 rounded-lg"
+                                            onClick={handleLeaveTeam}
+                                        >
+                                            ȘTERGE ECHIPA
+                                        </button>
+                                        <button
+                                            className="bg-yellow-600 hover:bg-yellow-500 py-2 px-4 rounded-lg"
+                                            onClick={() => {
+                                                setForm({ ...teamData } as any);
+                                                setAgreedPolicy(true);
+                                                setShowModal(true);
+                                            }}
+                                        >
+                                            MODIFICĂ ECHIPA
+                                        </button>
+                                    </>
+                                ) : (
+                                    <button
+                                        className="bg-gray-600 hover:bg-gray-500 py-2 px-4 rounded-lg"
+                                        onClick={handleLeaveTeam}
+                                    >
+                                        IEȘI DIN ECHIPĂ
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* MODAL */}
                     {showModal && (
                         <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-70 z-50">
                             <div className="bg-gray-800 p-6 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
                                 <div className="flex justify-between items-center mb-6">
-                                    <h3 className="text-2xl font-bold">Creează/Modifică echipă</h3>
+                                    <h3 className="text-2xl font-bold">FORMULAR ECHIPĂ</h3>
                                     <button
                                         onClick={() => setShowModal(false)}
                                         className="text-gray-400 hover:text-white text-2xl font-bold"
@@ -318,86 +359,65 @@ const StudentsPage = () => {
                                     </button>
                                 </div>
 
-                                {teamData && teamData.team_code && (
-                                    <div className="flex items-center justify-between bg-gray-700 p-3 rounded-lg mb-4">
-                    <span className="font-mono tracking-wider text-gray-100">
-                      Cod echipă: {teamData.team_code}
-                    </span>
-                                        <button
-                                            onClick={() => {
-                                                navigator.clipboard.writeText(teamData.team_code);
-                                                alert("Cod echipă copiat în clipboard!");
-                                            }}
-                                            className="text-gray-300 hover:text-green-400"
-                                        >
-                                            <ClipboardDocumentIcon className="w-6 h-6" />
-                                        </button>
-                                    </div>
-                                )}
-
-                                <div className="space-y-5">
-                                    {Object.keys(form).map((key) => (
-                                        <div key={key} className="space-y-2">
-                                            <label className="block text-gray-300 font-semibold">{key.replace("_", " ")}</label>
-
-                                            {key === "section" ? (
-                                                <select
-
-                                                    name={key}
-                                                    value={(form as any)[key]}
-                                                    onChange={handleFormChange}
-                                                    className="w-full px-4 py-2 rounded-lg bg-gray-700 text-gray-100 focus:outline-none focus:ring-2 focus:ring-green-500"
-                                                >
-                                                    <option value="gimnaziu">gimnaziu</option>
-                                                    <option value="liceu">liceu</option>
-                                                </select>
-                                            ) : (
-                                                <input
-                                                    name={key}
-                                                    placeholder={key.replace("_", " ")}
-                                                    className="w-full px-4 py-2 rounded-lg bg-gray-700 text-gray-100 focus:outline-none focus:ring-2 focus:ring-green-500"
-                                                    value={(form as any)[key]}
-                                                    onChange={handleFormChange}
-                                                />
-                                            )}
-                                        </div>
-                                    ))}
-
-                                    <div className="flex items-start mt-4">
-                                        <input
-                                            type="checkbox"
-                                            id="privacyPolicy"
-                                            checked={agreedPolicy}
-                                            onChange={() => setAgreedPolicy(!agreedPolicy)}
-                                            className="w-4 h-4 mt-1 text-green-600 bg-gray-700 border-gray-600 rounded focus:ring-green-500"
-                                        />
-                                        <label htmlFor="privacyPolicy" className="ml-2 text-gray-300 text-sm">
-                                            Am citit și sunt de acord cu{" "}
-                                            <a
-                                                href="/privacy-policy"
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="underline hover:text-green-400"
-                                            >
-                                                Politica de Confidențialitate și Prelucrare a Datelor
-                                            </a>
+                                {Object.keys(form).map((key) => (
+                                    <div key={key} className="space-y-2 mb-3">
+                                        <label className="block text-gray-300 font-semibold uppercase">
+                                            {key.replaceAll("_", " ")}
                                         </label>
-                                    </div>
 
-                                    <button
-                                        className={`w-full bg-green-600 hover:bg-green-500 text-white py-3 rounded-lg mt-4 ${
-                                            !agreedPolicy ? "opacity-50 cursor-not-allowed" : ""
-                                        }`}
-                                        onClick={handleCreateOrUpdateTeam}
-                                        disabled={!agreedPolicy}
-                                    >
-                                        Salvează echipa
-                                    </button>
+                                        {key === "section" ? (
+                                            <select
+                                                name={key}
+                                                value={(form as any)[key]}
+                                                onChange={handleFormChange}
+                                                className="w-full px-4 py-2 rounded-lg bg-gray-700 text-gray-100 focus:ring-2 focus:ring-green-500"
+                                            >
+                                                <option value="">Alege secțiunea</option>
+                                                <option value="gimnaziu">GIMNAZIU</option>
+                                                <option value="liceu">LICEU</option>
+                                            </select>
+                                        ) : (
+                                            <input
+                                                name={key}
+                                                placeholder={key.replaceAll("_", " ").toUpperCase()}
+                                                value={(form as any)[key]}
+                                                onChange={handleFormChange}
+                                                className="w-full px-4 py-2 rounded-lg bg-gray-700 text-gray-100 focus:ring-2 focus:ring-green-500"
+                                            />
+                                        )}
+                                    </div>
+                                ))}
+
+                                <div className="flex items-center mt-4">
+                                    <input
+                                        type="checkbox"
+                                        checked={agreedPolicy}
+                                        onChange={() => setAgreedPolicy(!agreedPolicy)}
+                                        className="w-4 h-4 text-green-600 bg-gray-700 border-gray-600 rounded"
+                                    />
+                                    <label className="ml-2 text-gray-300 text-sm">
+                                        Am citit și sunt de acord cu{" "}
+                                        <a href="/privacy-policy" target="_blank" className="underline text-green-400">
+                                            Politica de Confidențialitate
+                                        </a>
+                                    </label>
                                 </div>
+
+                                <button
+                                    onClick={handleCreateOrUpdateTeam}
+                                    disabled={!agreedPolicy}
+                                    className={`w-full mt-6 py-3 rounded-lg text-white ${
+                                        agreedPolicy
+                                            ? "bg-green-600 hover:bg-green-500"
+                                            : "bg-gray-600 cursor-not-allowed"
+                                    }`}
+                                >
+                                    SALVEAZĂ ECHIPA
+                                </button>
                             </div>
                         </div>
                     )}
-                </>
+                </div>
             )}
         </div>
     );
